@@ -1,4 +1,4 @@
 face:
   store:
     file:
-      directory: "/tmp/face-store"
+      directory: "~/tmp/face-store"
