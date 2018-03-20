@@ -61,9 +61,14 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
                 switch (type) {
                     case REFRESH:
                         faceStore.getPersonIds().forEach(personId -> {
-                            sendPerson(faceStore.getPerson(personId));
+                            sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
+                                    MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.PERSON.name()
+                            ), faceStore.getPerson(personId)));
                             faceStore.getFaceIdList(personId).forEach(faceId ->
-                                    sendFace(personId, faceStore.getFace(personId, faceId))
+                                    sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
+                                            MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.FACE.name(),
+                                            MessageHeaders.PERSON_ID, personId
+                                    ), faceStore.getFace(personId, faceId)))
                             );
                         });
                         break;
