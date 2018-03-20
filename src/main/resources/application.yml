@@ -1,0 +1,4 @@
+face:
+  store:
+    file:
+      directory: "/tmp/face-store"
