@@ -2,6 +2,7 @@ package com.github.charleslzq.facestore.server;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
@@ -9,6 +10,7 @@ import org.springframework.lang.NonNull;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+import org.springframework.web.socket.server.standard.ServletServerContainerFactoryBean;
 
 @Configuration
 @EnableWebSocket
@@ -20,6 +22,13 @@ public class FaceStoreConfiguration implements WebSocketConfigurer {
 
     @Autowired(required = false)
     private AsyncTaskExecutor asyncTaskExecutor = new SimpleAsyncTaskExecutor();
+
+    @Bean
+    public ServletServerContainerFactoryBean createServletServerContainerFactoryBean() {
+        ServletServerContainerFactoryBean container = new ServletServerContainerFactoryBean();
+        container.setMaxTextMessageBufferSize(1024 * 1024);
+        return container;
+    }
 
     public void registerWebSocketHandlers(@NonNull WebSocketHandlerRegistry webSocketHandlerRegistry) {
         webSocketHandlerRegistry.addHandler(new FaceStoreWebSocketBackend(faceStoreProperties.getDirectory(), asyncTaskExecutor), "/face-store").setAllowedOrigins("*");

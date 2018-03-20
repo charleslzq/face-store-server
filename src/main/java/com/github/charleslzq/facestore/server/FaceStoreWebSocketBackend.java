@@ -116,7 +116,7 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
     }
 
     public boolean supportsPartialMessages() {
-        return true;
+        return false;
     }
 
     public void onPersonUpdate(Person person) {

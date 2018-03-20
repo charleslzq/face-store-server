@@ -7,6 +7,9 @@ import org.joda.time.LocalDateTime;
 @Data
 public class Face implements Meta {
     private String id;
+    private Feature data;
+    private Picture pic;
+    private Version version;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }
