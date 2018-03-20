@@ -46,6 +46,7 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
         faceStore = new FaceFileReadWriteStore<>(
                 directory,
                 new ServerFaceDataType(),
+                Converters.registerLocalDateTime(new GsonBuilder()).create(),
                 Collections.singletonList(new AsyncFaceDataChangeListener<>(asyncTaskExecutor, this))
         );
     }
