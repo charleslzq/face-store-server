@@ -1,7 +1,10 @@
 package com.github.charleslzq.facestore.server;
 
 import com.fatboyindustrial.gsonjodatime.Converters;
-import com.github.charleslzq.facestore.*;
+import com.github.charleslzq.facestore.FaceData;
+import com.github.charleslzq.facestore.FaceFileReadWriteStore;
+import com.github.charleslzq.facestore.FaceStoreChangeListener;
+import com.github.charleslzq.facestore.ReadWriteFaceStore;
 import com.github.charleslzq.facestore.server.message.ClientMessagePayloadType;
 import com.github.charleslzq.facestore.server.message.Message;
 import com.github.charleslzq.facestore.server.message.MessageHeaders;
@@ -14,7 +17,6 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
-import org.joda.time.LocalDateTime;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.lang.NonNull;
 import org.springframework.web.socket.*;
@@ -24,9 +26,7 @@ import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Predicate;
 
 @Slf4j
 public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreChangeListener<Person, Face> {
@@ -63,35 +63,25 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
                 log.info("Client Request {}", type);
                 switch (type) {
                     case REFRESH:
-                        Optional<Predicate<Meta>> timestampFilterOptional = Optional.ofNullable(headers.get(MessageHeaders.TIMESTAMP))
-                                .map(time -> gson.fromJson(time, LocalDateTime.class))
-                                .map(timebase -> (meta -> meta.getUpdateTime().isAfter(timebase)));
-                        Predicate<Meta> metaFilter = timestampFilterOptional.orElse(meta -> true);
                         List<String> persons = faceStore.getPersonIds();
                         sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
                                 MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.PERSON_ID_LIST.name()
                         ), persons));
                         persons.forEach(personId -> {
-                            Person person = faceStore.getPerson(personId);
-                            if (metaFilter.test(person)) {
-                                sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
-                                        MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.PERSON.name()
-                                ), person));
-                            }
+                            sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
+                                    MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.PERSON.name()
+                            ), faceStore.getPerson(personId)));
                             List<String> faces = faceStore.getFaceIdList(personId);
                             sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
                                     MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.FACE_ID_LIST.name(),
                                     MessageHeaders.PERSON_ID, personId
                             ), faces));
-                            faces.forEach(faceId -> {
-                                Face face = faceStore.getFace(personId, faceId);
-                                if (metaFilter.test(face)) {
+                            faces.forEach(faceId ->
                                     sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
                                             MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.FACE.name(),
                                             MessageHeaders.PERSON_ID, personId
-                                    ), face));
-                                }
-                            });
+                                    ), faceStore.getFace(personId, faceId)))
+                            );
                         });
                         break;
                     case PERSON:
