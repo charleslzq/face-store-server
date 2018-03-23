@@ -38,7 +38,7 @@
         <dependency>
             <groupId>com.github.charleslzq</groupId>
             <artifactId>face-store</artifactId>
-            <version>1.0.0-RC6</version>
+            <version>1.0.0-RC10</version>
         </dependency>
 
         <dependency>
