@@ -18,9 +18,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.joda.time.LocalDateTime;
-import org.joda.time.Period;
 import org.springframework.core.task.AsyncTaskExecutor;
-import org.springframework.lang.NonNull;
 import org.springframework.web.socket.*;
 
 import java.io.IOException;
@@ -44,8 +42,10 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
     private final Gson gson = Converters.registerLocalDateTime(new GsonBuilder()).create();
     private final ReadWriteFaceStore<Person, Face> faceStore;
     private final Map<InetSocketAddress, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    private final FaceStoreHealthIndicator faceStoreHealthIndicator;
 
-    public FaceStoreWebSocketBackend(String directory, AsyncTaskExecutor asyncTaskExecutor) {
+    public FaceStoreWebSocketBackend(String directory, AsyncTaskExecutor asyncTaskExecutor, FaceStoreHealthIndicator faceStoreHealthIndicator) {
+        this.faceStoreHealthIndicator = faceStoreHealthIndicator;
         faceStore = new FaceFileReadWriteStore<>(
                 directory,
                 new ServerFaceDataType(),
@@ -54,7 +54,7 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
         );
     }
 
-    public void handleMessage(@NonNull WebSocketSession webSocketSession, @NonNull WebSocketMessage<?> webSocketMessage) {
+    public void handleMessage(WebSocketSession webSocketSession, WebSocketMessage<?> webSocketMessage) {
         if (webSocketMessage instanceof TextMessage) {
             TextMessage textMessage = (TextMessage) webSocketMessage;
             String content = textMessage.getPayload();
@@ -102,55 +102,57 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
                                         faceStore.getFace(personId, faceId)));
                             }
                         }
-                        confirm(webSocketSession, token, startTime);
+                        confirm(webSocketSession, type, token, startTime);
                         break;
                     case PERSON:
                         Message<Person> personMessage = gson.fromJson(content, PERSON_MESSAGE_TYPE.getType());
                         faceStore.savePerson(personMessage.getPayload());
-                        confirm(webSocketSession, token, startTime);
+                        confirm(webSocketSession, type, token, startTime);
                         break;
                     case FACE:
                         Message<Face> faceMessage = gson.fromJson(content, FACE_MESSAGE_TYPE.getType());
                         faceStore.saveFace(faceMessage.getHeaders().get(MessageHeaders.PERSON_ID), faceMessage.getPayload());
-                        confirm(webSocketSession, token, startTime);
+                        confirm(webSocketSession, type, token, startTime);
                         break;
                     case FACE_DATA:
                         Message<FaceData<Person, Face>> faceDataMessage = gson.fromJson(content, FACE_DATA_MESSAGE_TYPE.getType());
                         faceStore.saveFaceData(faceDataMessage.getPayload());
-                        confirm(webSocketSession, token, startTime);
+                        confirm(webSocketSession, type, token, startTime);
                         break;
                     case PERSON_DELETE:
                         faceStore.deleteFaceData(rawMessage.getHeaders().get(MessageHeaders.PERSON_ID));
-                        confirm(webSocketSession, token, startTime);
+                        confirm(webSocketSession, type, token, startTime);
                         break;
                     case FACE_CLEAR:
                         faceStore.clearFace(rawMessage.getHeaders().get(MessageHeaders.PERSON_ID));
-                        confirm(webSocketSession, token, startTime);
+                        confirm(webSocketSession, type, token, startTime);
                         break;
                     case FACE_DELETE:
                         faceStore.deleteFace(
                                 rawMessage.getHeaders().get(MessageHeaders.PERSON_ID),
                                 rawMessage.getHeaders().get(MessageHeaders.FACE_ID)
                         );
-                        confirm(webSocketSession, token, startTime);
+                        confirm(webSocketSession, type, token, startTime);
                         break;
                 }
             }
         }
     }
 
-    public void afterConnectionEstablished(@NonNull WebSocketSession webSocketSession) {
+    public void afterConnectionEstablished(WebSocketSession webSocketSession) {
         log.info("Session connected from {}, {}", webSocketSession.getRemoteAddress(), webSocketSession.getAttributes());
         sessions.put(webSocketSession.getRemoteAddress(), webSocketSession);
+        faceStoreHealthIndicator.addClient(webSocketSession.getRemoteAddress());
     }
 
-    public void handleTransportError(@NonNull WebSocketSession webSocketSession, @NonNull Throwable throwable) {
+    public void handleTransportError(WebSocketSession webSocketSession, Throwable throwable) {
         log.warn("Session error", throwable);
     }
 
-    public void afterConnectionClosed(@NonNull WebSocketSession webSocketSession, @NonNull CloseStatus closeStatus) {
+    public void afterConnectionClosed(WebSocketSession webSocketSession, CloseStatus closeStatus) {
         log.info("Session dis-connected from {}, {}, {}", webSocketSession.getRemoteAddress(), webSocketSession.getAttributes(), closeStatus);
         sessions.remove(webSocketSession.getRemoteAddress());
+        faceStoreHealthIndicator.removeClient(webSocketSession.getRemoteAddress());
     }
 
     public boolean supportsPartialMessages() {
@@ -207,9 +209,17 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
         log.info("Successfully send message to {}/{} client(s)", success, size);
     }
 
-    private void confirm(WebSocketSession webSocketSession, String token, LocalDateTime startTime) {
+    private void confirm(WebSocketSession webSocketSession, ClientMessagePayloadType type, String token, LocalDateTime startTime) {
         LocalDateTime now = LocalDateTime.now();
-        log.info("Request {} handled, use {} second(s)", token, Period.fieldDifference(now, startTime).toStandardDuration().getMillis() / 1000.0);
+        FaceStoreHealthIndicator.ClientMessage clientMessage = new FaceStoreHealthIndicator.ClientMessage(
+                webSocketSession.getRemoteAddress(),
+                type,
+                token,
+                startTime,
+                now
+        );
+        faceStoreHealthIndicator.recordClientMessage(clientMessage);
+        log.info("Request {} handled, use {} second(s)", token, clientMessage.getDuration());
         sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
                 MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.CONFIRM.name(),
                 MessageHeaders.TOKEN, token,

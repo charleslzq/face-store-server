@@ -2,3 +2,9 @@ face:
   store:
     file:
       directory: "~/tmp/face-store"
+endpoints:
+  health:
+    sensitive: false
+management:
+  security:
+    enabled: false
