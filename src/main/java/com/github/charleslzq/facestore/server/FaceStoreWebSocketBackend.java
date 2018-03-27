@@ -17,6 +17,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+import org.joda.time.LocalDateTime;
+import org.joda.time.Period;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.lang.NonNull;
 import org.springframework.web.socket.*;
@@ -60,53 +62,77 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
                 Message<Object> rawMessage = gson.fromJson(content, RAW_CLIENT_MESSAGE_TYPE.getType());
                 Map<String, String> headers = rawMessage.getHeaders();
                 ClientMessagePayloadType type = ClientMessagePayloadType.valueOf(headers.get(MessageHeaders.TYPE_HEADER));
-                log.info("Client Request {}", type);
+                String token = headers.get(MessageHeaders.TOKEN);
+                LocalDateTime startTime = gson.fromJson(headers.get(MessageHeaders.TIMESTAMP), LocalDateTime.class);
+                log.info("Handling client Request {} with token {} sent at {}", type, token, startTime);
                 switch (type) {
                     case REFRESH:
                         List<String> persons = faceStore.getPersonIds();
                         sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
-                                MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.PERSON_ID_LIST.name()
+                                MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.PERSON_ID_LIST.name(),
+                                MessageHeaders.TOKEN, token,
+                                MessageHeaders.TIMESTAMP, gson.toJson(LocalDateTime.now())
                         ), persons));
-                        persons.forEach(personId -> {
+                        for (int index = 0; index < persons.size(); index++) {
+                            String personId = persons.get(index);
                             sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
-                                    MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.PERSON.name()
+                                    MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.PERSON.name(),
+                                    MessageHeaders.TOKEN, token,
+                                    MessageHeaders.SIZE, String.valueOf(persons.size()),
+                                    MessageHeaders.INDEX, String.valueOf(index),
+                                    MessageHeaders.TIMESTAMP, gson.toJson(LocalDateTime.now())
                             ), faceStore.getPerson(personId)));
                             List<String> faces = faceStore.getFaceIdList(personId);
                             sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
                                     MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.FACE_ID_LIST.name(),
-                                    MessageHeaders.PERSON_ID, personId
+                                    MessageHeaders.TOKEN, token,
+                                    MessageHeaders.PERSON_ID, personId,
+                                    MessageHeaders.TIMESTAMP, gson.toJson(LocalDateTime.now())
                             ), faces));
-                            faces.forEach(faceId ->
-                                    sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
-                                            MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.FACE.name(),
-                                            MessageHeaders.PERSON_ID, personId
-                                    ), faceStore.getFace(personId, faceId)))
-                            );
-                        });
+                            for (int faceIndex = 0; faceIndex < faces.size(); faceIndex++) {
+                                String faceId = faces.get(faceIndex);
+                                sendMessage(webSocketSession, new Message<>(ImmutableMap.<String, String>builder()
+                                        .put(MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.FACE.name())
+                                        .put(MessageHeaders.TOKEN, token)
+                                        .put(MessageHeaders.PERSON_ID, personId)
+                                        .put(MessageHeaders.SIZE, String.valueOf(faces.size()))
+                                        .put(MessageHeaders.INDEX, String.valueOf(faceIndex))
+                                        .put(MessageHeaders.TIMESTAMP, gson.toJson(LocalDateTime.now()))
+                                        .build(),
+                                        faceStore.getFace(personId, faceId)));
+                            }
+                        }
+                        confirm(webSocketSession, token, startTime);
                         break;
                     case PERSON:
                         Message<Person> personMessage = gson.fromJson(content, PERSON_MESSAGE_TYPE.getType());
                         faceStore.savePerson(personMessage.getPayload());
+                        confirm(webSocketSession, token, startTime);
                         break;
                     case FACE:
                         Message<Face> faceMessage = gson.fromJson(content, FACE_MESSAGE_TYPE.getType());
                         faceStore.saveFace(faceMessage.getHeaders().get(MessageHeaders.PERSON_ID), faceMessage.getPayload());
+                        confirm(webSocketSession, token, startTime);
                         break;
                     case FACE_DATA:
                         Message<FaceData<Person, Face>> faceDataMessage = gson.fromJson(content, FACE_DATA_MESSAGE_TYPE.getType());
                         faceStore.saveFaceData(faceDataMessage.getPayload());
+                        confirm(webSocketSession, token, startTime);
                         break;
                     case PERSON_DELETE:
                         faceStore.deleteFaceData(rawMessage.getHeaders().get(MessageHeaders.PERSON_ID));
+                        confirm(webSocketSession, token, startTime);
                         break;
                     case FACE_CLEAR:
                         faceStore.clearFace(rawMessage.getHeaders().get(MessageHeaders.PERSON_ID));
+                        confirm(webSocketSession, token, startTime);
                         break;
                     case FACE_DELETE:
                         faceStore.deleteFace(
                                 rawMessage.getHeaders().get(MessageHeaders.PERSON_ID),
                                 rawMessage.getHeaders().get(MessageHeaders.FACE_ID)
                         );
+                        confirm(webSocketSession, token, startTime);
                         break;
                 }
             }
@@ -175,14 +201,29 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
     }
 
     private void publish(Message message) {
-        sessions.values().forEach(session -> sendMessage(session, message));
+        int size = sessions.values().size();
+        log.info("Ready to send message to {} client(s)", size);
+        long success = sessions.values().stream().filter(session -> sendMessage(session, message)).count();
+        log.info("Successfully send message to {}/{} client(s)", success, size);
     }
 
-    private synchronized void sendMessage(WebSocketSession webSocketSession, Message message) {
+    private void confirm(WebSocketSession webSocketSession, String token, LocalDateTime startTime) {
+        LocalDateTime now = LocalDateTime.now();
+        log.info("Request {} handled, use {} second(s)", token, Period.fieldDifference(now, startTime).toStandardDuration().getMillis() / 1000.0);
+        sendMessage(webSocketSession, new Message<>(ImmutableMap.of(
+                MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.CONFIRM.name(),
+                MessageHeaders.TOKEN, token,
+                MessageHeaders.TIMESTAMP, gson.toJson(LocalDateTime.now())
+        ), new Object()));
+    }
+
+    private synchronized boolean sendMessage(WebSocketSession webSocketSession, Message message) {
         try {
             webSocketSession.sendMessage(new TextMessage(gson.toJson(message)));
+            return true;
         } catch (IOException e) {
-            log.error("Error sending message " + message.toString(), e);
+            log.error("Error sending message " + message.toString() + " to " + webSocketSession.getRemoteAddress(), e);
+            return false;
         }
     }
 }
