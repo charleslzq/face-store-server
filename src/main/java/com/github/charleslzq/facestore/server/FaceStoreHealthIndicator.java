@@ -7,8 +7,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import org.joda.time.DateTimeZone;
+import org.joda.time.Duration;
 import org.joda.time.LocalDateTime;
-import org.joda.time.Period;
 import org.springframework.boot.actuate.health.AbstractHealthIndicator;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.stereotype.Component;
@@ -89,7 +90,7 @@ public class FaceStoreHealthIndicator extends AbstractHealthIndicator {
 
         @JsonInclude
         public Double getDuration() {
-            return Period.fieldDifference(startTime, endTime).toStandardDuration().getMillis() / 1000.0;
+            return new Duration(startTime.toDateTime(DateTimeZone.UTC), endTime.toDateTime(DateTimeZone.UTC)).getMillis() / 1000.0;
         }
     }
 }

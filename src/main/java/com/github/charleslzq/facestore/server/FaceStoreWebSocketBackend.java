@@ -2,33 +2,36 @@ package com.github.charleslzq.facestore.server;
 
 import com.fatboyindustrial.gsonjodatime.Converters;
 import com.github.charleslzq.facestore.FaceData;
-import com.github.charleslzq.facestore.FaceFileReadWriteStore;
 import com.github.charleslzq.facestore.FaceStoreChangeListener;
-import com.github.charleslzq.facestore.ReadWriteFaceStore;
+import com.github.charleslzq.facestore.ListenableReadWriteFaceStore;
 import com.github.charleslzq.facestore.server.message.ClientMessagePayloadType;
 import com.github.charleslzq.facestore.server.message.Message;
 import com.github.charleslzq.facestore.server.message.MessageHeaders;
 import com.github.charleslzq.facestore.server.message.ServerMessagePayloadType;
 import com.github.charleslzq.facestore.server.type.Face;
 import com.github.charleslzq.facestore.server.type.Person;
-import com.github.charleslzq.facestore.server.type.ServerFaceDataType;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.joda.time.LocalDateTime;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.AsyncTaskExecutor;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
+import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 
+import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
+@Component
 public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreChangeListener<Person, Face> {
     private static final String HEART_BEAT_MESSAGE = "@heart";
     private static final TypeToken<Message<Object>> RAW_CLIENT_MESSAGE_TYPE = new TypeToken<Message<Object>>() {
@@ -40,18 +43,18 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
     private static final TypeToken<Message<FaceData<Person, Face>>> FACE_DATA_MESSAGE_TYPE = new TypeToken<Message<FaceData<Person, Face>>>() {
     };
     private final Gson gson = Converters.registerLocalDateTime(new GsonBuilder()).create();
-    private final ReadWriteFaceStore<Person, Face> faceStore;
     private final Map<InetSocketAddress, WebSocketSession> sessions = new ConcurrentHashMap<>();
-    private final FaceStoreHealthIndicator faceStoreHealthIndicator;
+    @Autowired(required = false)
+    private AsyncTaskExecutor asyncTaskExecutor = new SimpleAsyncTaskExecutor();
+    @Autowired
+    @Qualifier("faceStoreCacheWrapper")
+    private ListenableReadWriteFaceStore<Person, Face> faceStore;
+    @Autowired
+    private FaceStoreHealthIndicator faceStoreHealthIndicator;
 
-    public FaceStoreWebSocketBackend(String directory, AsyncTaskExecutor asyncTaskExecutor, FaceStoreHealthIndicator faceStoreHealthIndicator) {
-        this.faceStoreHealthIndicator = faceStoreHealthIndicator;
-        faceStore = new FaceFileReadWriteStore<>(
-                directory,
-                new ServerFaceDataType(),
-                Converters.registerLocalDateTime(new GsonBuilder()).create(),
-                Collections.singletonList(new AsyncFaceDataChangeListener<>(asyncTaskExecutor, this))
-        );
+    @PostConstruct
+    public void setup() {
+        faceStore.getListeners().add(new AsyncFaceDataChangeListener<>(asyncTaskExecutor, this));
     }
 
     public void handleMessage(WebSocketSession webSocketSession, WebSocketMessage<?> webSocketMessage) {
@@ -116,7 +119,9 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
                         break;
                     case FACE_DATA:
                         Message<FaceData<Person, Face>> faceDataMessage = gson.fromJson(content, FACE_DATA_MESSAGE_TYPE.getType());
-                        faceStore.saveFaceData(faceDataMessage.getPayload());
+                        FaceData<Person, Face> faceData = faceDataMessage.getPayload();
+                        faceStore.savePerson(faceData.getPerson());
+                        faceData.getFaces().forEach(face -> faceStore.saveFace(faceData.getPerson().getId(), face));
                         confirm(webSocketSession, type, token, startTime);
                         break;
                     case PERSON_DELETE:
