@@ -24,17 +24,12 @@ public class AsyncFaceDataChangeListener<P extends Meta, F extends Meta> impleme
     }
 
     @Override
-    public void onFaceDataDelete(String s) {
-        asyncTaskExecutor.submit(() -> faceStoreChangeListener.onFaceDataDelete(s));
+    public void onPersonDelete(String s) {
+        asyncTaskExecutor.submit(() -> faceStoreChangeListener.onPersonDelete(s));
     }
 
     @Override
     public void onFaceDelete(String s, String s1) {
         asyncTaskExecutor.submit(() -> faceStoreChangeListener.onFaceDelete(s, s1));
-    }
-
-    @Override
-    public void onPersonFaceClear(String s) {
-        asyncTaskExecutor.submit(() -> faceStoreChangeListener.onPersonFaceClear(s));
     }
 }

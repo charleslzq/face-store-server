@@ -1,7 +1,6 @@
 package com.github.charleslzq.facestore.server;
 
 import com.fatboyindustrial.gsonjodatime.Converters;
-import com.github.charleslzq.facestore.FaceData;
 import com.github.charleslzq.facestore.FaceStoreChangeListener;
 import com.github.charleslzq.facestore.ListenableReadWriteFaceStore;
 import com.github.charleslzq.facestore.server.message.ClientMessagePayloadType;
@@ -39,8 +38,6 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
     private static final TypeToken<Message<Person>> PERSON_MESSAGE_TYPE = new TypeToken<Message<Person>>() {
     };
     private static final TypeToken<Message<Face>> FACE_MESSAGE_TYPE = new TypeToken<Message<Face>>() {
-    };
-    private static final TypeToken<Message<FaceData<Person, Face>>> FACE_DATA_MESSAGE_TYPE = new TypeToken<Message<FaceData<Person, Face>>>() {
     };
     private final Gson gson = Converters.registerLocalDateTime(new GsonBuilder()).create();
     private final Map<InetSocketAddress, WebSocketSession> sessions = new ConcurrentHashMap<>();
@@ -118,19 +115,8 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
                         faceStore.saveFace(faceMessage.getHeaders().get(MessageHeaders.PERSON_ID), faceMessage.getPayload());
                         confirm(webSocketSession, type, token, startTime);
                         break;
-                    case FACE_DATA:
-                        Message<FaceData<Person, Face>> faceDataMessage = gson.fromJson(content, FACE_DATA_MESSAGE_TYPE.getType());
-                        FaceData<Person, Face> faceData = faceDataMessage.getPayload();
-                        faceStore.savePerson(faceData.getPerson());
-                        faceData.getFaces().forEach(face -> faceStore.saveFace(faceData.getPerson().getId(), face));
-                        confirm(webSocketSession, type, token, startTime);
-                        break;
                     case PERSON_DELETE:
-                        faceStore.deleteFaceData(rawMessage.getHeaders().get(MessageHeaders.PERSON_ID));
-                        confirm(webSocketSession, type, token, startTime);
-                        break;
-                    case FACE_CLEAR:
-                        faceStore.clearFace(rawMessage.getHeaders().get(MessageHeaders.PERSON_ID));
+                        faceStore.deletePerson(rawMessage.getHeaders().get(MessageHeaders.PERSON_ID));
                         confirm(webSocketSession, type, token, startTime);
                         break;
                     case FACE_DELETE:
@@ -173,7 +159,7 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
         sendFace(personId, face);
     }
 
-    public void onFaceDataDelete(String personId) {
+    public void onPersonDelete(String personId) {
         publish(new Message<>(ImmutableMap.of(
                 MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.PERSON_DELETE.name(),
                 MessageHeaders.PERSON_ID, personId
@@ -185,13 +171,6 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
                 MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.FACE_DELETE.name(),
                 MessageHeaders.PERSON_ID, personId,
                 MessageHeaders.FACE_ID, faceId
-        ), ""));
-    }
-
-    public void onPersonFaceClear(String personId) {
-        publish(new Message<>(ImmutableMap.of(
-                MessageHeaders.TYPE_HEADER, ServerMessagePayloadType.FACE_CLEAR.name(),
-                MessageHeaders.PERSON_ID, personId
         ), ""));
     }
 

@@ -6,7 +6,6 @@ import com.github.charleslzq.facestore.FaceFileReadWriteStore;
 import com.github.charleslzq.facestore.ListenableReadWriteFaceStore;
 import com.github.charleslzq.facestore.server.type.Face;
 import com.github.charleslzq.facestore.server.type.Person;
-import com.github.charleslzq.facestore.server.type.ServerFaceDataType;
 import com.google.gson.GsonBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -35,7 +34,8 @@ public class LocalStoreConfiguration {
     public ListenableReadWriteFaceStore<Person, Face> listenableReadWriteFaceStore() {
         return new FaceFileReadWriteStore<>(
                 faceStoreProperties.getDirectory(),
-                new ServerFaceDataType(),
+                Person.class,
+                Face.class,
                 Converters.registerLocalDateTime(new GsonBuilder()).create(),
                 new ArrayList<>()
         );

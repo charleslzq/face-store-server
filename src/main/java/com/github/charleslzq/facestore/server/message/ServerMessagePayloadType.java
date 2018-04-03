@@ -7,6 +7,5 @@ public enum ServerMessagePayloadType {
     FACE_ID_LIST,
     PERSON_DELETE,
     FACE_DELETE,
-    FACE_CLEAR,
     CONFIRM
 }

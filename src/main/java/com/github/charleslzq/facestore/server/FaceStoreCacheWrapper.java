@@ -1,7 +1,5 @@
 package com.github.charleslzq.facestore.server;
 
-import com.github.charleslzq.facestore.FaceData;
-import com.github.charleslzq.facestore.FaceDataType;
 import com.github.charleslzq.facestore.FaceStoreChangeListener;
 import com.github.charleslzq.facestore.ListenableReadWriteFaceStore;
 import com.github.charleslzq.facestore.server.type.Face;
@@ -29,7 +27,6 @@ public class FaceStoreCacheWrapper implements ListenableReadWriteFaceStore<Perso
     @Caching(
             evict = {
                     @CacheEvict(cacheNames = CacheNames.PERSON, key = "#person.id"),
-                    @CacheEvict(cacheNames = CacheNames.FACE_DATA, key = "#person.id"),
                     @CacheEvict(cacheManager = CacheNames.PERSON_ID_LIST)
             }
     )
@@ -40,7 +37,6 @@ public class FaceStoreCacheWrapper implements ListenableReadWriteFaceStore<Perso
     @Override
     @Caching(
             evict = {
-                    @CacheEvict(cacheNames = CacheNames.FACE_DATA, key = "#personId"),
                     @CacheEvict(cacheNames = CacheNames.FACE, key = "#personId + '_' + #face.id"),
                     @CacheEvict(cacheNames = CacheNames.FACE_ID_LIST, key = "#personId")
             }
@@ -52,59 +48,24 @@ public class FaceStoreCacheWrapper implements ListenableReadWriteFaceStore<Perso
     @Override
     @Caching(
             evict = {
-                    @CacheEvict(cacheNames = CacheNames.FACE_DATA, key = "#faceData.person.id"),
-                    @CacheEvict(cacheNames = CacheNames.PERSON, key = "#faceData.person.id"),
-                    @CacheEvict(cacheNames = CacheNames.FACE_ID_LIST, key = "#faceData.person.id"),
-                    @CacheEvict(CacheNames.FACE),
-                    @CacheEvict(CacheNames.PERSON_ID_LIST)
-            }
-    )
-    public void saveFaceData(FaceData<? extends Person, ? extends Face> faceData) {
-        internal.saveFaceData(faceData);
-    }
-
-    @Override
-    @Caching(
-            evict = {
-                    @CacheEvict(cacheNames = CacheNames.FACE_DATA, key = "#personId"),
                     @CacheEvict(cacheNames = CacheNames.PERSON, key = "#personId"),
                     @CacheEvict(cacheNames = CacheNames.FACE_ID_LIST, key = "#personId"),
-                    @CacheEvict(CacheNames.FACE),
                     @CacheEvict(CacheNames.PERSON_ID_LIST)
             }
     )
-    public void deleteFaceData(String personId) {
-        internal.deleteFaceData(personId);
+    public void deletePerson(String personId) {
+        internal.deletePerson(personId);
     }
 
     @Override
     @Caching(
             evict = {
-                    @CacheEvict(cacheNames = CacheNames.FACE_DATA, key = "#personId"),
                     @CacheEvict(cacheNames = CacheNames.FACE, key = "#personId + '_' + #faceId"),
                     @CacheEvict(cacheNames = CacheNames.FACE_ID_LIST, key = "#personId")
             }
     )
     public void deleteFace(String personId, String faceId) {
         internal.deleteFace(personId, faceId);
-    }
-
-    @Override
-    @Caching(
-            evict = {
-                    @CacheEvict(cacheNames = CacheNames.FACE_DATA, key = "#personId"),
-                    @CacheEvict(cacheNames = CacheNames.FACE_ID_LIST, key = "#personId"),
-                    @CacheEvict(CacheNames.FACE)
-            }
-    )
-    public void clearFace(String personId) {
-        internal.clearFace(personId);
-    }
-
-    @NotNull
-    @Override
-    public FaceDataType<Person, Face> getDataType() {
-        return internal.getDataType();
     }
 
     @NotNull
@@ -118,19 +79,6 @@ public class FaceStoreCacheWrapper implements ListenableReadWriteFaceStore<Perso
     @Override
     public Observable<String> getPersonIdsAsObservable() {
         return internal.getPersonIdsAsObservable();
-    }
-
-    @Nullable
-    @Override
-    @Cacheable(cacheNames = CacheNames.FACE_DATA, key = "#personId")
-    public FaceData<Person, Face> getFaceData(String personId) {
-        return internal.getFaceData(personId);
-    }
-
-    @NotNull
-    @Override
-    public Observable<FaceData<Person, Face>> getFaceDataAsObservable(String personId) {
-        return internal.getFaceDataAsObservable(personId);
     }
 
     @Nullable
@@ -178,9 +126,20 @@ public class FaceStoreCacheWrapper implements ListenableReadWriteFaceStore<Perso
         return internal.getListeners();
     }
 
+    @NotNull
+    @Override
+    public Class<Person> getPersonClass() {
+        return Person.class;
+    }
+
+    @NotNull
+    @Override
+    public Class<Face> getFaceClass() {
+        return Face.class;
+    }
+
     public static class CacheNames {
         static final String PERSON_ID_LIST = "personIdList";
-        static final String FACE_DATA = "faceData";
         static final String PERSON = "person";
         static final String FACE = "face";
         static final String FACE_ID_LIST = "faceIdList";
