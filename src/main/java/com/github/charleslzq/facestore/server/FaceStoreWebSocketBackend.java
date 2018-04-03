@@ -66,8 +66,9 @@ public class FaceStoreWebSocketBackend implements WebSocketHandler, FaceStoreCha
                 Map<String, String> headers = rawMessage.getHeaders();
                 ClientMessagePayloadType type = ClientMessagePayloadType.valueOf(headers.get(MessageHeaders.TYPE_HEADER));
                 String token = headers.get(MessageHeaders.TOKEN);
-                LocalDateTime startTime = gson.fromJson(headers.get(MessageHeaders.TIMESTAMP), LocalDateTime.class);
-                log.info("Handling client Request {} with token {} sent at {}", type, token, startTime);
+                LocalDateTime startTime = LocalDateTime.now();
+                LocalDateTime clientSentTime = gson.fromJson(headers.get(MessageHeaders.TIMESTAMP), LocalDateTime.class);
+                log.info("Handling client Request {} with token {} sent at {}", type, token, clientSentTime);
                 switch (type) {
                     case REFRESH:
                         List<String> persons = faceStore.getPersonIds();
