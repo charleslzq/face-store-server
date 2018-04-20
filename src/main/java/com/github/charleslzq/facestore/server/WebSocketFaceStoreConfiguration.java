@@ -18,7 +18,7 @@ public class WebSocketFaceStoreConfiguration implements WebSocketConfigurer {
     @Bean
     public ServletServerContainerFactoryBean createServletServerContainerFactoryBean() {
         ServletServerContainerFactoryBean container = new ServletServerContainerFactoryBean();
-        container.setMaxTextMessageBufferSize(1024 * 1024);
+        container.setMaxTextMessageBufferSize(5 * 1024 * 1024);
         return container;
     }
 
